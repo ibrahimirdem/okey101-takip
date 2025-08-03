@@ -1,0 +1,2142 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oyun Puan Takip Sistemi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        body {
+            font-family: 'Poppins', sans-serif;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .history-item-add {
+            background-color: rgba(34, 197, 94, 0.1);
+        }
+        .history-item-update {
+            background-color: rgba(234, 179, 8, 0.1);
+        }
+        .history-item-delete {
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+        .player-row {
+            transition: all 0.3s ease;
+        }
+        .player-row:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .lowest-score {
+            background-color: rgba(34, 197, 94, 0.2);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .game-view {
+            display: none;
+        }
+        .game-view.active {
+            display: block;
+        }
+        .game-history {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        .game-history.expanded {
+            max-height: 500px;
+        }
+        /* Mobile responsive tabs */
+        .nav-tabs {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+        }
+        .nav-tabs::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+        .nav-tabs-container {
+            display: flex;
+            min-width: max-content;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-bold text-indigo-700 mb-2">Oyun Puan Takip Sistemi</h1>
+            <p class="text-gray-600">101 Okey, Uno ve diğer oyunlar için puan takip uygulaması</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs mb-8">
+            <div class="nav-tabs-container border-b border-gray-200">
+                <button class="tab-btn px-6 py-3 font-medium text-indigo-600 border-b-2 border-indigo-600 focus:outline-none whitespace-nowrap" data-tab="home">
+                    <i class="fas fa-home mr-2"></i>Ana Sayfa
+                </button>
+                <button class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-gray-700 focus:outline-none whitespace-nowrap" data-tab="games-list">
+                    <i class="fas fa-list mr-2"></i>Oyunlar
+                </button>
+                <button class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-gray-700 focus:outline-none whitespace-nowrap" data-tab="players">
+                    <i class="fas fa-users mr-2"></i>Oyuncular
+                </button>
+                <button class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-gray-700 focus:outline-none whitespace-nowrap" data-tab="game-types">
+                    <i class="fas fa-gamepad mr-2"></i>Oyun Türleri
+                </button>
+                <button class="tab-btn px-6 py-3 font-medium text-gray-500 hover:text-gray-700 focus:outline-none whitespace-nowrap" data-tab="stats">
+                    <i class="fas fa-chart-bar mr-2"></i>İstatistikler
+                </button>
+            </div>
+        </div>
+
+        <!-- Home Tab Content -->
+        <div id="home" class="tab-content active">
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Yeni Oyun Başlat</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Oyun Türü</label>
+                        <select id="gameType" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Oyun Türü Seçin</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">Oyun Formatı</label>
+                        <select id="gameFormat" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="individual">Bireysel</option>
+                            <option value="team">Takımlı</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <label class="block text-gray-700 font-medium mb-2">Oyuncular</label>
+                    <div id="playersSelection" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <!-- Players will be dynamically added here -->
+                    </div>
+                </div>
+                
+                <div id="teamSelection" class="hidden mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-red-50 p-4 rounded-lg">
+                            <h3 class="font-medium text-red-700 mb-3">Takım 1 (Kırmızı)</h3>
+                            <div id="team1" class="space-y-2">
+                                <!-- Team 1 players will be added here -->
+                            </div>
+                        </div>
+                        <div class="bg-blue-50 p-4 rounded-lg">
+                            <h3 class="font-medium text-blue-700 mb-3">Takım 2 (Mavi)</h3>
+                            <div id="team2" class="space-y-2">
+                                <!-- Team 2 players will be added here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="startGameBtn" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Oyunu Başlat
+                </button>
+            </div>
+            
+            <!-- Active Games -->
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Aktif Oyunlar</h2>
+                <div id="activeGames" class="space-y-4">
+                    <!-- Active games will be displayed here -->
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-gamepad text-4xl mb-3"></i>
+                        <p>Aktif oyun bulunmamaktadır.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Games List Tab Content -->
+        <div id="games-list" class="tab-content">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Tüm Oyunlar</h2>
+                
+                <div class="mb-6 flex space-x-4">
+                    <button id="filterAllBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300">
+                        Tümü
+                    </button>
+                    <button id="filterActiveBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300">
+                        Aktif
+                    </button>
+                    <button id="filterFinishedBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300">
+                        Bitmiş
+                    </button>
+                </div>
+                
+                <div id="allGames" class="space-y-4">
+                    <!-- All games will be displayed here -->
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-gamepad text-4xl mb-3"></i>
+                        <p>Henüz oyun bulunmamaktadır.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Players Tab Content -->
+        <div id="players" class="tab-content">
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Oyuncu Yönetimi</h2>
+                
+                <div class="mb-6">
+                    <div class="flex">
+                        <input type="text" id="newPlayerName" placeholder="Yeni oyuncu adı" class="flex-grow px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button id="addPlayerBtn" class="bg-indigo-600 text-white px-6 py-2 rounded-r-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-plus mr-2"></i>Ekle
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold text-gray-700 mb-4">Aktif Oyuncular</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oyuncu Adı</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="playersTable" class="bg-white divide-y divide-gray-200">
+                                <!-- Players will be dynamically added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-700 mb-4">Gizlenen Oyuncular</h3>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oyuncu Adı</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hiddenPlayersTable" class="bg-white divide-y divide-gray-200">
+                                <!-- Hidden players will be dynamically added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Types Tab Content -->
+        <div id="game-types" class="tab-content">
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">Oyun Türleri</h2>
+                
+                <div class="mb-6">
+                    <div class="flex">
+                        <input type="text" id="newGameType" placeholder="Yeni oyun türü" class="flex-grow px-4 py-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <button id="addGameTypeBtn" class="bg-indigo-600 text-white px-6 py-2 rounded-r-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-plus mr-2"></i>Ekle
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oyun Türü</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gameTypesTable" class="bg-white divide-y divide-gray-200">
+                            <!-- Game types will be dynamically added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Tab Content -->
+        <div id="stats" class="tab-content">
+            <div class="bg-white rounded-xl shadow-md p-6">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">İstatistikler</h2>
+                
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-700 mb-4">Oyun Kazananları</h3>
+                    <div id="winnersStats" class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Oyuncu</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">101 Okey</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uno</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Düz Okey</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Toplam</th>
+                                </tr>
+                            </thead>
+                            <tbody id="winnersTable" class="bg-white divide-y divide-gray-200">
+                                <!-- Stats will be dynamically added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game View -->
+        <div id="game-view" class="game-view">
+            <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                    <h2 id="gameTitle" class="text-2xl font-bold text-gray-800 mb-4 md:mb-0">Oyun Adı</h2>
+                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                        <button id="backToHomeBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300 focus:outline-none">
+                            <i class="fas fa-arrow-left mr-2"></i>Ana Sayfa
+                        </button>
+                        <button id="endGameBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition duration-300 focus:outline-none">
+                            <i class="fas fa-flag-checkered mr-2"></i>Oyunu Bitir
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 sm:mb-0">Puan Cetveli</h3>
+                        <button id="addRoundBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-green-500">
+                            <i class="fas fa-plus mr-2"></i>Yeni El Ekle
+                        </button>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table id="scoreTable" class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">El</th>
+                                    <!-- Player headers will be dynamically added here -->
+                                </tr>
+                            </thead>
+                            <tbody id="scoreTableBody" class="bg-white divide-y divide-gray-200">
+                                <!-- Score rows will be dynamically added here -->
+                            </tbody>
+                            <tfoot class="bg-gray-50">
+                                <tr>
+                                    <td class="px-4 py-3 font-medium">Toplam</td>
+                                    <!-- Total scores will be dynamically added here -->
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                
+                <div>
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                        <h3 class="text-xl font-semibold text-gray-800 mb-4 sm:mb-0">Oyun Geçmişi</h3>
+                        <button id="toggleHistoryBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none">
+                            <i class="fas fa-history mr-2"></i>Geçmişi Göster/Gizle
+                        </button>
+                    </div>
+                    <div id="gameHistory" class="game-history">
+                        <!-- Game history will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div class="p-6">
+                <h3 class="text-xl font-bold text-gray-800 mb-4">Onay</h3>
+                <p id="confirmMessage" class="text-gray-600 mb-6">Emin misiniz?</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancelConfirmBtn" class="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                        İptal
+                    </button>
+                    <button id="confirmBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        Onayla
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase configuration
+        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
+        
+        // Initialize Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Current game state
+        let currentGame = null;
+        let selectedPlayers = [];
+        let team1Players = [];
+        let team2Players = [];
+        let gameFilter = 'all'; // all, active, finished
+
+        // DOM Elements
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const gameView = document.getElementById('game-view');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
+
+        // Initialize the application
+        async function init() {
+            await loadGameTypes();
+            await loadPlayers();
+            await loadActiveGames();
+            await loadAllGames();
+            await loadStats();
+            
+            // Event listeners
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => switchTab(button.dataset.tab));
+            });
+            
+            document.getElementById('addPlayerBtn').addEventListener('click', addPlayer);
+            document.getElementById('addGameTypeBtn').addEventListener('click', addGameType);
+            document.getElementById('startGameBtn').addEventListener('click', startGame);
+            document.getElementById('backToHomeBtn').addEventListener('click', backToHome);
+            document.getElementById('addRoundBtn').addEventListener('click', addRound);
+            document.getElementById('endGameBtn').addEventListener('click', endGame);
+            document.getElementById('toggleHistoryBtn').addEventListener('click', toggleGameHistory);
+            document.getElementById('gameFormat').addEventListener('change', toggleTeamSelection);
+            cancelConfirmBtn.addEventListener('click', closeConfirmModal);
+            
+            // Game filter buttons
+            document.getElementById('filterAllBtn').addEventListener('click', () => filterGames('all'));
+            document.getElementById('filterActiveBtn').addEventListener('click', () => filterGames('active'));
+            document.getElementById('filterFinishedBtn').addEventListener('click', () => filterGames('finished'));
+            
+            // Initialize player selection
+            renderPlayerSelection();
+        }
+
+        // Tab switching
+        function switchTab(tabId) {
+            // Hide game view if switching to another tab
+            if (tabId !== 'game-view') {
+                gameView.classList.remove('active');
+            }
+            
+            tabButtons.forEach(btn => {
+                if (btn.dataset.tab === tabId) {
+                    btn.classList.add('text-indigo-600', 'border-b-2', 'border-indigo-600');
+                    btn.classList.remove('text-gray-500');
+                } else {
+                    btn.classList.remove('text-indigo-600', 'border-b-2', 'border-indigo-600');
+                    btn.classList.add('text-gray-500');
+                }
+            });
+            
+            tabContents.forEach(content => {
+                if (content.id === tabId) {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+            
+            // Refresh data when switching tabs
+            if (tabId === 'players') {
+                loadPlayers();
+            } else if (tabId === 'game-types') {
+                loadGameTypes();
+            } else if (tabId === 'stats') {
+                loadStats();
+            } else if (tabId === 'home') {
+                loadActiveGames();
+                renderPlayerSelection();
+            } else if (tabId === 'games-list') {
+                loadAllGames();
+            }
+        }
+
+        // Data loading functions
+        async function loadPlayers() {
+            const { data, error } = await supabase
+                .from('players')
+                .select('*')
+                .order('name');
+                
+            if (error) {
+                console.error('Error loading players:', error);
+                return;
+            }
+            
+            renderPlayers(data);
+        }
+
+        async function loadGameTypes() {
+            const { data, error } = await supabase
+                .from('game_types')
+                .select('*')
+                .order('name');
+                
+            if (error) {
+                console.error('Error loading game types:', error);
+                return;
+            }
+            
+            renderGameTypes(data);
+            updateGameTypeDropdown(data);
+        }
+
+        async function loadActiveGames() {
+            const { data, error } = await supabase
+                .from('games')
+                .select(`
+                    *,
+                    game_types(name, key),
+                    game_players(
+                        player_id,
+                        players(name),
+                        team
+                    )
+                `)
+                .eq('is_active', true)
+                .order('created_at', { ascending: false });
+                
+            if (error) {
+                console.error('Error loading active games:', error);
+                return;
+            }
+            
+            renderActiveGames(data);
+        }
+
+        async function loadAllGames() {
+            let query = supabase
+                .from('games')
+                .select(`
+                    *,
+                    game_types(name, key),
+                    game_players(
+                        player_id,
+                        players(name),
+                        team
+                    )
+                `)
+                .order('created_at', { ascending: false });
+                
+            if (gameFilter === 'active') {
+                query = query.eq('is_active', true);
+            } else if (gameFilter === 'finished') {
+                query = query.eq('is_active', false);
+            }
+            
+            const { data, error } = await query;
+                
+            if (error) {
+                console.error('Error loading all games:', error);
+                return;
+            }
+            
+            renderAllGames(data);
+        }
+
+        async function loadStats() {
+            const { data, error } = await supabase
+                .from('stats')
+                .select(`
+                    *,
+                    players(name),
+                    game_types(name, key)
+                `)
+                .order('wins', { ascending: false });
+                
+            if (error) {
+                console.error('Error loading stats:', error);
+                return;
+            }
+            
+            renderStats(data);
+        }
+
+        async function loadGameRounds(gameId) {
+            const { data, error } = await supabase
+                .from('rounds')
+                .select(`
+                    *,
+                    scores(
+                        player_id,
+                        players(name),
+                        team,
+                        score
+                    )
+                `)
+                .eq('game_id', gameId)
+                .order('round_number');
+                
+            if (error) {
+                console.error('Error loading game rounds:', error);
+                return [];
+            }
+            
+            return data;
+        }
+
+        async function loadGameHistory(gameId) {
+            const { data, error } = await supabase
+                .from('game_history')
+                .select('*')
+                .eq('game_id', gameId)
+                .order('created_at', { ascending: false });
+                
+            if (error) {
+                console.error('Error loading game history:', error);
+                return [];
+            }
+            
+            return data;
+        }
+
+        // Player management
+        function renderPlayers(players) {
+            const playersTable = document.getElementById('playersTable');
+            const hiddenPlayersTable = document.getElementById('hiddenPlayersTable');
+            playersTable.innerHTML = '';
+            hiddenPlayersTable.innerHTML = '';
+            
+            const activePlayers = players.filter(player => player.is_active);
+            const hiddenPlayers = players.filter(player => !player.is_active);
+            
+            if (activePlayers.length === 0) {
+                playersTable.innerHTML = `
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500">
+                            Henüz oyuncu eklenmemiş.
+                        </td>
+                    </tr>
+                `;
+            } else {
+                activePlayers.forEach(player => {
+                    const row = document.createElement('tr');
+                    row.className = 'player-row';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                    <span class="text-indigo-800 font-medium">${player.name.charAt(0)}</span>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">${player.name}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <button onclick="hidePlayer(${player.id})" class="text-yellow-600 hover:text-yellow-900 focus:outline-none mr-3">
+                                <i class="fas fa-eye-slash"></i> Gizle
+                            </button>
+                            <button onclick="deletePlayer(${player.id})" class="text-red-600 hover:text-red-900 focus:outline-none">
+                                <i class="fas fa-trash"></i> Sil
+                            </button>
+                        </td>
+                    `;
+                    playersTable.appendChild(row);
+                });
+            }
+            
+            if (hiddenPlayers.length === 0) {
+                hiddenPlayersTable.innerHTML = `
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500">
+                            Gizlenen oyuncu bulunmamaktadır.
+                        </td>
+                    </tr>
+                `;
+            } else {
+                hiddenPlayers.forEach(player => {
+                    const row = document.createElement('tr');
+                    row.className = 'player-row';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
+                                    <span class="text-gray-500 font-medium">${player.name.charAt(0)}</span>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-500">${player.name}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <button onclick="unhidePlayer(${player.id})" class="text-green-600 hover:text-green-900 focus:outline-none">
+                                <i class="fas fa-eye"></i> Göster
+                            </button>
+                        </td>
+                    `;
+                    hiddenPlayersTable.appendChild(row);
+                });
+            }
+        }
+
+        function renderPlayerSelection() {
+            const playersSelection = document.getElementById('playersSelection');
+            playersSelection.innerHTML = '';
+            
+            // Get active players from the table
+            const activePlayers = Array.from(document.querySelectorAll('#playersTable tr')).slice(1).map(row => {
+                const playerId = row.querySelector('button[onclick^="hidePlayer"]').getAttribute('onclick').match(/\d+/)[0];
+                const playerName = row.querySelector('.text-gray-900').textContent;
+                return { id: parseInt(playerId), name: playerName };
+            });
+            
+            if (activePlayers.length === 0) {
+                playersSelection.innerHTML = `
+                    <div class="col-span-full text-center py-4 text-gray-500">
+                        Henüz oyuncu eklenmemiş. Lütfen önce oyuncu ekleyin.
+                    </div>
+                `;
+                return;
+            }
+            
+            activePlayers.forEach(player => {
+                const playerDiv = document.createElement('div');
+                playerDiv.className = 'flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50';
+                playerDiv.innerHTML = `
+                    <input type="checkbox" id="player-${player.id}" class="player-checkbox h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded" data-player-id="${player.id}">
+                    <label for="player-${player.id}" class="ml-2 block text-sm text-gray-900 cursor-pointer">
+                        ${player.name}
+                    </label>
+                `;
+                playersSelection.appendChild(playerDiv);
+                
+                // Add event listener to checkbox
+                const checkbox = playerDiv.querySelector(`#player-${player.id}`);
+                checkbox.addEventListener('change', handlePlayerSelection);
+            });
+        }
+
+        function handlePlayerSelection(event) {
+            const playerId = parseInt(event.target.dataset.playerId);
+            const playerName = event.target.nextElementSibling.textContent;
+            
+            if (event.target.checked) {
+                selectedPlayers.push({ id: playerId, name: playerName });
+            } else {
+                selectedPlayers = selectedPlayers.filter(p => p.id !== playerId);
+            }
+            
+            updateTeamSelection();
+        }
+
+        function toggleTeamSelection() {
+            const gameFormat = document.getElementById('gameFormat').value;
+            const teamSelection = document.getElementById('teamSelection');
+            
+            if (gameFormat === 'team') {
+                teamSelection.classList.remove('hidden');
+                updateTeamSelection();
+            } else {
+                teamSelection.classList.add('hidden');
+                team1Players = [];
+                team2Players = [];
+            }
+        }
+
+        function updateTeamSelection() {
+            const team1Div = document.getElementById('team1');
+            const team2Div = document.getElementById('team2');
+            
+            team1Div.innerHTML = '';
+            team2Div.innerHTML = '';
+            
+            if (selectedPlayers.length === 0) {
+                team1Div.innerHTML = '<p class="text-gray-500 text-sm">Oyuncu seçilmedi</p>';
+                team2Div.innerHTML = '<p class="text-gray-500 text-sm">Oyuncu seçilmedi</p>';
+                return;
+            }
+            
+            selectedPlayers.forEach(player => {
+                const playerDiv1 = document.createElement('div');
+                playerDiv1.className = 'flex items-center justify-between p-2 bg-white rounded border';
+                playerDiv1.innerHTML = `
+                    <span class="text-sm">${player.name}</span>
+                    <div>
+                        <button onclick="moveToTeam1(${player.id})" class="text-red-600 hover:text-red-800 focus:outline-none">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <button onclick="moveToTeam2(${player.id})" class="text-blue-600 hover:text-blue-800 focus:outline-none ml-2">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                `;
+                
+                const playerDiv2 = document.createElement('div');
+                playerDiv2.className = 'flex items-center justify-between p-2 bg-white rounded border';
+                playerDiv2.innerHTML = `
+                    <span class="text-sm">${player.name}</span>
+                    <div>
+                        <button onclick="moveToTeam1(${player.id})" class="text-red-600 hover:text-red-800 focus:outline-none">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
+                        <button onclick="moveToTeam2(${player.id})" class="text-blue-600 hover:text-blue-800 focus:outline-none ml-2">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                `;
+                
+                // Determine which team the player is in
+                if (team1Players.some(p => p.id === player.id)) {
+                    team1Div.appendChild(playerDiv1);
+                } else if (team2Players.some(p => p.id === player.id)) {
+                    team2Div.appendChild(playerDiv2);
+                } else {
+                    // Player not assigned to any team yet, add to team 1 by default
+                    team1Players.push(player);
+                    team1Div.appendChild(playerDiv1);
+                }
+            });
+        }
+
+        function moveToTeam1(playerId) {
+            const player = selectedPlayers.find(p => p.id === playerId);
+            
+            // Remove from team 2 if exists
+            team2Players = team2Players.filter(p => p.id !== playerId);
+            
+            // Add to team 1 if not already there
+            if (!team1Players.some(p => p.id === playerId)) {
+                team1Players.push(player);
+            }
+            
+            updateTeamSelection();
+        }
+
+        function moveToTeam2(playerId) {
+            const player = selectedPlayers.find(p => p.id === playerId);
+            
+            // Remove from team 1 if exists
+            team1Players = team1Players.filter(p => p.id !== playerId);
+            
+            // Add to team 2 if not already there
+            if (!team2Players.some(p => p.id === playerId)) {
+                team2Players.push(player);
+            }
+            
+            updateTeamSelection();
+        }
+
+        async function addPlayer() {
+            const newPlayerName = document.getElementById('newPlayerName').value.trim();
+            
+            if (!newPlayerName) {
+                alert('Lütfen oyuncu adı girin.');
+                return;
+            }
+            
+            // Check for duplicate player names
+            const { data: existingPlayers } = await supabase
+                .from('players')
+                .select('name')
+                .ilike('name', newPlayerName);
+                
+            if (existingPlayers && existingPlayers.length > 0) {
+                alert('Bu isimde bir oyuncu zaten mevcut.');
+                return;
+            }
+            
+            const { data, error } = await supabase
+                .from('players')
+                .insert([{ name: newPlayerName, is_active: true }]);
+                
+            if (error) {
+                console.error('Error adding player:', error);
+                alert('Oyuncu eklenirken bir hata oluştu.');
+                return;
+            }
+            
+            document.getElementById('newPlayerName').value = '';
+            await loadPlayers();
+            
+            // Add to history
+            await addToGameHistory(null, 'add', `Yeni oyuncu eklendi: ${newPlayerName}`);
+        }
+
+        async function hidePlayer(playerId) {
+            const player = Array.from(document.querySelectorAll('#playersTable tr')).slice(1).find(row => {
+                return row.querySelector('button[onclick^="hidePlayer"]').getAttribute('onclick').match(/\d+/)[0] === playerId.toString();
+            });
+            
+            if (!player) return;
+            
+            const playerName = player.querySelector('.text-gray-900').textContent;
+            
+            confirmMessage.textContent = `"${playerName}" oyuncusunu gizlemek istediğinize emin misiniz?`;
+            confirmModal.classList.add('active');
+            
+            confirmBtn.onclick = async () => {
+                const { error } = await supabase
+                    .from('players')
+                    .update({ is_active: false })
+                    .eq('id', playerId);
+                    
+                if (error) {
+                    console.error('Error hiding player:', error);
+                    alert('Oyuncu gizlenirken bir hata oluştu.');
+                    return;
+                }
+                
+                await loadPlayers();
+                closeConfirmModal();
+                
+                // Add to history
+                await addToGameHistory(null, 'update', `Oyuncu gizlendi: ${playerName}`);
+            };
+        }
+
+        async function unhidePlayer(playerId) {
+            const player = Array.from(document.querySelectorAll('#hiddenPlayersTable tr')).slice(1).find(row => {
+                return row.querySelector('button[onclick^="unhidePlayer"]').getAttribute('onclick').match(/\d+/)[0] === playerId.toString();
+            });
+            
+            if (!player) return;
+            
+            const playerName = player.querySelector('.text-gray-500').textContent;
+            
+            const { error } = await supabase
+                .from('players')
+                .update({ is_active: true })
+                .eq('id', playerId);
+                
+            if (error) {
+                console.error('Error unhiding player:', error);
+                alert('Oyuncu gösterilirken bir hata oluştu.');
+                return;
+            }
+            
+            await loadPlayers();
+            
+            // Add to history
+            await addToGameHistory(null, 'update', `Oyuncu tekrar aktif edildi: ${playerName}`);
+        }
+
+        async function deletePlayer(playerId) {
+            const player = Array.from(document.querySelectorAll('#playersTable tr')).slice(1).find(row => {
+                return row.querySelector('button[onclick^="deletePlayer"]').getAttribute('onclick').match(/\d+/)[0] === playerId.toString();
+            });
+            
+            if (!player) return;
+            
+            const playerName = player.querySelector('.text-gray-900').textContent;
+            
+            // Check if player has been in any game
+            const { data: gamePlayers } = await supabase
+                .from('game_players')
+                .select('id')
+                .eq('player_id', playerId);
+                
+            if (gamePlayers && gamePlayers.length > 0) {
+                alert('Bu oyuncu daha önce bir oyunda yer aldığı için silinemez. Gizleyebilirsiniz.');
+                return;
+            }
+            
+            confirmMessage.textContent = `"${playerName}" oyuncusunu silmek istediğinize emin misiniz?`;
+            confirmModal.classList.add('active');
+            
+            confirmBtn.onclick = async () => {
+                const { error } = await supabase
+                    .from('players')
+                    .delete()
+                    .eq('id', playerId);
+                    
+                if (error) {
+                    console.error('Error deleting player:', error);
+                    alert('Oyuncu silinirken bir hata oluştu.');
+                    return;
+                }
+                
+                await loadPlayers();
+                closeConfirmModal();
+                
+                // Add to history
+                await addToGameHistory(null, 'delete', `Oyuncu silindi: ${playerName}`);
+            };
+        }
+
+        // Game type management
+        function renderGameTypes(gameTypes) {
+            const gameTypesTable = document.getElementById('gameTypesTable');
+            gameTypesTable.innerHTML = '';
+            
+            if (gameTypes.length === 0) {
+                gameTypesTable.innerHTML = `
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-center text-gray-500">
+                            Henüz oyun türü eklenmemiş.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            gameTypes.forEach(gameType => {
+                const row = document.createElement('tr');
+                row.className = 'player-row';
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 bg-purple-100 rounded-full flex items-center justify-center">
+                                <i class="fas fa-gamepad text-purple-600"></i>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900">${gameType.name}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <button onclick="deleteGameType(${gameType.id})" class="text-red-600 hover:text-red-900 focus:outline-none">
+                            <i class="fas fa-trash"></i> Sil
+                        </button>
+                    </td>
+                `;
+                gameTypesTable.appendChild(row);
+            });
+        }
+
+        function updateGameTypeDropdown(gameTypes) {
+            const gameTypeDropdown = document.getElementById('gameType');
+            gameTypeDropdown.innerHTML = '<option value="">Oyun Türü Seçin</option>';
+            
+            gameTypes.forEach(gameType => {
+                const option = document.createElement('option');
+                option.value = gameType.key;
+                option.textContent = gameType.name;
+                gameTypeDropdown.appendChild(option);
+            });
+        }
+
+        async function addGameType() {
+            const newGameType = document.getElementById('newGameType').value.trim();
+            
+            if (!newGameType) {
+                alert('Lütfen oyun türü adı girin.');
+                return;
+            }
+            
+            const key = newGameType.toLowerCase().replace(/\s+/g, '-');
+            
+            const { data, error } = await supabase
+                .from('game_types')
+                .insert([{ name: newGameType, key }]);
+                
+            if (error) {
+                console.error('Error adding game type:', error);
+                alert('Oyun türü eklenirken bir hata oluştu.');
+                return;
+            }
+            
+            document.getElementById('newGameType').value = '';
+            await loadGameTypes();
+            
+            // Add to history
+            await addToGameHistory(null, 'add', `Yeni oyun türü eklendi: ${newGameType}`);
+        }
+
+        async function deleteGameType(gameTypeId) {
+            const gameType = Array.from(document.querySelectorAll('#gameTypesTable tr')).slice(1).find(row => {
+                return row.querySelector('button[onclick^="deleteGameType"]').getAttribute('onclick').match(/\d+/)[0] === gameTypeId.toString();
+            });
+            
+            if (!gameType) return;
+            
+            const gameTypeName = gameType.querySelector('.text-gray-900').textContent;
+            
+            confirmMessage.textContent = `"${gameTypeName}" oyun türünü silmek istediğinize emin misiniz?`;
+            confirmModal.classList.add('active');
+            
+            confirmBtn.onclick = async () => {
+                const { error } = await supabase
+                    .from('game_types')
+                    .delete()
+                    .eq('id', gameTypeId);
+                    
+                if (error) {
+                    console.error('Error deleting game type:', error);
+                    alert('Oyun türü silinirken bir hata oluştu.');
+                    return;
+                }
+                
+                await loadGameTypes();
+                closeConfirmModal();
+                
+                // Add to history
+                await addToGameHistory(null, 'delete', `Oyun türü silindi: ${gameTypeName}`);
+            };
+        }
+
+        // Game management
+        async function startGame() {
+            const gameTypeKey = document.getElementById('gameType').value;
+            const gameFormat = document.getElementById('gameFormat').value;
+            
+            if (!gameTypeKey) {
+                alert('Lütfen oyun türü seçin.');
+                return;
+            }
+            
+            if (selectedPlayers.length === 0) {
+                alert('Lütfen en az bir oyuncu seçin.');
+                return;
+            }
+            
+            if (gameFormat === 'team' && (team1Players.length === 0 || team2Players.length === 0)) {
+                alert('Lütfen her iki takıma da en az bir oyuncu atayın.');
+                return;
+            }
+            
+            // Get game type
+            const { data: gameTypes } = await supabase
+                .from('game_types')
+                .select('id')
+                .eq('key', gameTypeKey);
+                
+            if (!gameTypes || gameTypes.length === 0) {
+                alert('Oyun türü bulunamadı.');
+                return;
+            }
+            
+            const gameTypeId = gameTypes[0].id;
+            
+            // Create new game
+            const { data: newGame, error: gameError } = await supabase
+                .from('games')
+                .insert([{ 
+                    type_id: gameTypeId,
+                    format: gameFormat,
+                    is_active: true
+                }])
+                .select();
+                
+            if (gameError || !newGame || newGame.length === 0) {
+                console.error('Error creating game:', gameError);
+                alert('Oyun oluşturulurken bir hata oluştu.');
+                return;
+            }
+            
+            const gameId = newGame[0].id;
+            
+            // Add players to game
+            const gamePlayers = [];
+            
+            if (gameFormat === 'team') {
+                team1Players.forEach(player => {
+                    gamePlayers.push({ game_id: gameId, player_id: player.id, team: 'team1' });
+                });
+                team2Players.forEach(player => {
+                    gamePlayers.push({ game_id: gameId, player_id: player.id, team: 'team2' });
+                });
+            } else {
+                selectedPlayers.forEach(player => {
+                    gamePlayers.push({ game_id: gameId, player_id: player.id, team: null });
+                });
+            }
+            
+            const { error: playersError } = await supabase
+                .from('game_players')
+                .insert(gamePlayers);
+                
+            if (playersError) {
+                console.error('Error adding players to game:', playersError);
+                alert('Oyuncular oyuna eklenirken bir hata oluştu.');
+                return;
+            }
+            
+            // Set current game
+            currentGame = {
+                id: gameId,
+                type_id: gameTypeId,
+                format: gameFormat,
+                is_active: true,
+                players: gameFormat === 'team' ? [...team1Players, ...team2Players] : [...selectedPlayers],
+                teams: gameFormat === 'team' ? {
+                    team1: [...team1Players],
+                    team2: [...team2Players]
+                } : null
+            };
+            
+            // Reset selections
+            selectedPlayers = [];
+            team1Players = [];
+            team2Players = [];
+            document.querySelectorAll('.player-checkbox').forEach(cb => cb.checked = false);
+            
+            // Open game view
+            openGameView();
+            
+            // Add to history
+            await addToGameHistory(gameId, 'add', `Yeni oyun başlatıldı: ${gameTypeKey}`);
+        }
+
+        function renderActiveGames(games) {
+            const activeGamesDiv = document.getElementById('activeGames');
+            activeGamesDiv.innerHTML = '';
+            
+            if (games.length === 0) {
+                activeGamesDiv.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-gamepad text-4xl mb-3"></i>
+                        <p>Aktif oyun bulunmamaktadır.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            games.forEach(game => {
+                const gameCard = document.createElement('div');
+                gameCard.className = 'bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-300';
+                
+                // Process players
+                let playersText = '';
+                if (game.format === 'team') {
+                    const team1Players = game.game_players.filter(gp => gp.team === 'team1').map(gp => gp.players.name);
+                    const team2Players = game.game_players.filter(gp => gp.team === 'team2').map(gp => gp.players.name);
+                    
+                    playersText = `
+                        <div class="flex justify-between mb-2">
+                            <div class="text-red-600 font-medium">Takım 1: ${team1Players.join(', ')}</div>
+                            <div class="text-blue-600 font-medium">Takım 2: ${team2Players.join(', ')}</div>
+                        </div>
+                    `;
+                } else {
+                    const playerNames = game.game_players.map(gp => gp.players.name);
+                    playersText = `<div class="text-gray-600 mb-2">Oyuncular: ${playerNames.join(', ')}</div>`;
+                }
+                
+                gameCard.innerHTML = `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-800">${game.game_types.name}</h3>
+                            ${playersText}
+                            <div class="text-sm text-gray-500">Başlangıç: ${new Date(game.created_at).toLocaleString('tr-TR')}</div>
+                        </div>
+                        <button onclick="resumeGame(${game.id})" class="mt-3 sm:mt-0 bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-play mr-2"></i>Devam Et
+                        </button>
+                    </div>
+                `;
+                
+                activeGamesDiv.appendChild(gameCard);
+            });
+        }
+
+        function renderAllGames(games) {
+            const allGamesDiv = document.getElementById('allGames');
+            allGamesDiv.innerHTML = '';
+            
+            if (games.length === 0) {
+                allGamesDiv.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-gamepad text-4xl mb-3"></i>
+                        <p>${gameFilter === 'active' ? 'Aktif' : gameFilter === 'finished' ? 'Bitmiş' : 'Henüz'} oyun bulunmamaktadır.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            games.forEach(game => {
+                const gameCard = document.createElement('div');
+                gameCard.className = 'bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow duration-300';
+                
+                // Process players
+                let playersText = '';
+                if (game.format === 'team') {
+                    const team1Players = game.game_players.filter(gp => gp.team === 'team1').map(gp => gp.players.name);
+                    const team2Players = game.game_players.filter(gp => gp.team === 'team2').map(gp => gp.players.name);
+                    
+                    playersText = `
+                        <div class="flex justify-between mb-2">
+                            <div class="text-red-600 font-medium">Takım 1: ${team1Players.join(', ')}</div>
+                            <div class="text-blue-600 font-medium">Takım 2: ${team2Players.join(', ')}</div>
+                        </div>
+                    `;
+                } else {
+                    const playerNames = game.game_players.map(gp => gp.players.name);
+                    playersText = `<div class="text-gray-600 mb-2">Oyuncular: ${playerNames.join(', ')}</div>`;
+                }
+                
+                let statusBadge = '';
+                let actionButton = '';
+                
+                if (game.is_active) {
+                    statusBadge = '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">Aktif</span>';
+                    actionButton = `
+                        <button onclick="resumeGame(${game.id})" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <i class="fas fa-play mr-2"></i>Devam Et
+                        </button>
+                    `;
+                } else {
+                    statusBadge = '<span class="px-2 py-1 bg-gray-100 text-gray-800 text-xs font-medium rounded-full">Bitmiş</span>';
+                    actionButton = `
+                        <button onclick="viewGameDetails(${game.id})" class="bg-gray-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-700 transition duration-300 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                            <i class="fas fa-eye mr-2"></i>Detayları Gör
+                        </button>
+                    `;
+                }
+                
+                gameCard.innerHTML = `
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                        <div>
+                            <div class="flex items-center mb-2">
+                                <h3 class="text-lg font-semibold text-gray-800 mr-2">${game.game_types.name}</h3>
+                                ${statusBadge}
+                            </div>
+                            ${playersText}
+                            <div class="text-sm text-gray-500">Başlangıç: ${new Date(game.created_at).toLocaleString('tr-TR')}</div>
+                            ${game.ended_at ? `<div class="text-sm text-gray-500">Bitiş: ${new Date(game.ended_at).toLocaleString('tr-TR')}</div>` : ''}
+                        </div>
+                        ${actionButton}
+                    </div>
+                `;
+                
+                allGamesDiv.appendChild(gameCard);
+            });
+        }
+
+        function filterGames(filter) {
+            gameFilter = filter;
+            
+            // Update button styles
+            document.getElementById('filterAllBtn').className = filter === 'all' 
+                ? 'px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300'
+                : 'px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300';
+            
+            document.getElementById('filterActiveBtn').className = filter === 'active' 
+                ? 'px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300'
+                : 'px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300';
+            
+            document.getElementById('filterFinishedBtn').className = filter === 'finished' 
+                ? 'px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300'
+                : 'px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition duration-300';
+            
+            loadAllGames();
+        }
+
+        async function resumeGame(gameId) {
+            // Get game details
+            const { data: game, error } = await supabase
+                .from('games')
+                .select(`
+                    *,
+                    game_types(name, key),
+                    game_players(
+                        player_id,
+                        players(name),
+                        team
+                    )
+                `)
+                .eq('id', gameId)
+                .single();
+                
+            if (error || !game) {
+                console.error('Error loading game:', error);
+                alert('Oyun yüklenirken bir hata oluştu.');
+                return;
+            }
+            
+            // Set current game
+            currentGame = {
+                id: game.id,
+                type_id: game.type_id,
+                type: { name: game.game_types.name, key: game.game_types.key },
+                format: game.format,
+                is_active: game.is_active,
+                players: game.game_players.map(gp => ({ 
+                    id: gp.player_id, 
+                    name: gp.players.name,
+                    team: gp.team
+                })),
+                teams: game.format === 'team' ? {
+                    team1: game.game_players.filter(gp => gp.team === 'team1').map(gp => ({ 
+                        id: gp.player_id, 
+                        name: gp.players.name
+                    })),
+                    team2: game.game_players.filter(gp => gp.team === 'team2').map(gp => ({ 
+                        id: gp.player_id, 
+                        name: gp.players.name
+                    }))
+                } : null
+            };
+            
+            openGameView();
+        }
+
+        async function viewGameDetails(gameId) {
+            await resumeGame(gameId);
+        }
+
+        async function openGameView() {
+            if (!currentGame) return;
+            
+            // Hide all tabs
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active state from all tab buttons
+            tabButtons.forEach(btn => {
+                btn.classList.remove('text-indigo-600', 'border-b-2', 'border-indigo-600');
+                btn.classList.add('text-gray-500');
+            });
+            
+            // Show game view
+            gameView.classList.add('active');
+            
+            // Set game title
+            document.getElementById('gameTitle').textContent = currentGame.type.name;
+            
+            // Load game data
+            const rounds = await loadGameRounds(currentGame.id);
+            const history = await loadGameHistory(currentGame.id);
+            
+            // Render score table
+            renderScoreTable(rounds);
+            
+            // Render game history
+            renderGameHistory(history);
+            
+            // Disable controls if game is finished
+            if (!currentGame.is_active) {
+                document.getElementById('addRoundBtn').disabled = true;
+                document.getElementById('endGameBtn').disabled = true;
+                document.getElementById('addRoundBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                document.getElementById('endGameBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                document.getElementById('addRoundBtn').disabled = false;
+                document.getElementById('endGameBtn').disabled = false;
+                document.getElementById('addRoundBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById('endGameBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        function backToHome() {
+            // Hide game view
+            gameView.classList.remove('active');
+            
+            // Show home tab
+            switchTab('home');
+        }
+
+        function renderScoreTable(rounds) {
+            if (!currentGame) return;
+            
+            const scoreTable = document.getElementById('scoreTable');
+            const scoreTableBody = document.getElementById('scoreTableBody');
+            const scoreTableFooter = scoreTable.querySelector('tfoot tr');
+            
+            // Clear existing content
+            scoreTableBody.innerHTML = '';
+            scoreTableFooter.innerHTML = '<td class="px-4 py-3 font-medium">Toplam</td>';
+            
+            // Add player headers
+            const headerRow = scoreTable.querySelector('thead tr');
+            headerRow.innerHTML = '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">El</th>';
+            
+            if (currentGame.format === 'team') {
+                // Add team headers with player names
+                headerRow.innerHTML += `
+                    <th class="px-4 py-3 text-left text-xs font-medium text-red-600 uppercase tracking-wider">
+                        Takım 1<br>
+                        <span class="text-xs font-normal text-gray-500">${currentGame.teams.team1.map(p => p.name).join(', ')}</span>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">
+                        Takım 2<br>
+                        <span class="text-xs font-normal text-gray-500">${currentGame.teams.team2.map(p => p.name).join(', ')}</span>
+                    </th>
+                `;
+                
+                // Add footer cells for teams
+                scoreTableFooter.innerHTML += `
+                    <td class="px-4 py-3 font-medium" id="total-team1">0</td>
+                    <td class="px-4 py-3 font-medium" id="total-team2">0</td>
+                `;
+            } else {
+                currentGame.players.forEach(player => {
+                    headerRow.innerHTML += `
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${player.name}</th>
+                    `;
+                    
+                    // Add footer cells for players
+                    scoreTableFooter.innerHTML += `
+                        <td class="px-4 py-3 font-medium" id="total-${player.id}">0</td>
+                    `;
+                });
+            }
+            
+            // Add action column
+            headerRow.innerHTML += '<th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">İşlem</th>';
+            scoreTableFooter.innerHTML += '<td></td>';
+            
+            // Add rounds
+            rounds.forEach((round, index) => {
+                addRoundToTable(round, index);
+            });
+            
+            // Calculate totals
+            calculateTotals(rounds);
+        }
+
+        async function addRound() {
+            if (!currentGame) return;
+            
+            // Get round number
+            const { data: existingRounds } = await supabase
+                .from('rounds')
+                .select('round_number')
+                .eq('game_id', currentGame.id)
+                .order('round_number', { ascending: false })
+                .limit(1);
+                
+            const roundNumber = existingRounds && existingRounds.length > 0 ? existingRounds[0].round_number + 1 : 1;
+            
+            // Create new round
+            const { data: newRound, error } = await supabase
+                .from('rounds')
+                .insert([{ 
+                    game_id: currentGame.id,
+                    round_number
+                }])
+                .select();
+                
+            if (error || !newRound || newRound.length === 0) {
+                console.error('Error creating round:', error);
+                alert('El oluşturulurken bir hata oluştu.');
+                return;
+            }
+            
+            const roundId = newRound[0].id;
+            
+            // Add to game history
+            await addToGameHistory(currentGame.id, 'add', `${roundNumber}. el eklendi.`);
+            
+            // Reload game data
+            const rounds = await loadGameRounds(currentGame.id);
+            renderScoreTable(rounds);
+        }
+
+        function addRoundToTable(round, index) {
+            const scoreTableBody = document.getElementById('scoreTableBody');
+            const row = document.createElement('tr');
+            row.id = `round-${round.id}`;
+            row.className = 'hover:bg-gray-50';
+            
+            // Round number
+            row.innerHTML = `<td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${round.round_number}</td>`;
+            
+            // Scores
+            if (currentGame.format === 'team') {
+                const team1Score = round.scores?.find(s => s.team === 'team1')?.score || 0;
+                const team2Score = round.scores?.find(s => s.team === 'team2')?.score || 0;
+                
+                row.innerHTML += `
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <input type="number" class="score-input w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                               data-round-id="${round.id}" data-team="team1" value="${team1Score || ''}" ${!currentGame.is_active ? 'disabled' : ''}>
+                    </td>
+                    <td class="px-4 py-3 whitespace-nowrap">
+                        <input type="number" class="score-input w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                               data-round-id="${round.id}" data-team="team2" value="${team2Score || ''}" ${!currentGame.is_active ? 'disabled' : ''}>
+                    </td>
+                `;
+            } else {
+                currentGame.players.forEach(player => {
+                    const playerScore = round.scores?.find(s => s.player_id === player.id)?.score || 0;
+                    
+                    row.innerHTML += `
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <input type="number" class="score-input w-20 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" 
+                                   data-round-id="${round.id}" data-player-id="${player.id}" value="${playerScore || ''}" ${!currentGame.is_active ? 'disabled' : ''}>
+                        </td>
+                    `;
+                });
+            }
+            
+            // Actions
+            const deleteDisabled = !currentGame.is_active ? 'disabled' : '';
+            const deleteClass = !currentGame.is_active ? 'opacity-50 cursor-not-allowed' : 'text-red-600 hover:text-red-900';
+            
+            row.innerHTML += `
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                    <button onclick="deleteRound(${round.id})" class="${deleteClass} focus:outline-none" ${deleteDisabled}>
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            
+            scoreTableBody.appendChild(row);
+            
+            // Add event listeners to score inputs only if game is active
+            if (currentGame.is_active) {
+                const scoreInputs = row.querySelectorAll('.score-input');
+                scoreInputs.forEach(input => {
+                    input.addEventListener('change', updateScore);
+                });
+            }
+            
+            // Highlight lowest score
+            highlightLowestScore(round);
+        }
+
+        async function updateScore(event) {
+            const input = event.target;
+            const roundId = parseInt(input.dataset.roundId);
+            
+            // Get current value
+            let currentValue;
+            let playerOrTeam;
+            let scoreData = {};
+            
+            if (currentGame.format === 'team') {
+                const team = input.dataset.team;
+                currentValue = input.value === '' ? 0 : parseInt(input.value) || 0;
+                playerOrTeam = team === 'team1' ? 'Takım 1' : 'Takım 2';
+                scoreData = { round_id: roundId, team, score: currentValue };
+            } else {
+                const playerId = parseInt(input.dataset.playerId);
+                currentValue = input.value === '' ? 0 : parseInt(input.value) || 0;
+                const player = currentGame.players.find(p => p.id === playerId);
+                playerOrTeam = player.name;
+                scoreData = { round_id: roundId, player_id: playerId, score: currentValue };
+            }
+            
+            // Get round number
+            const { data: round } = await supabase
+                .from('rounds')
+                .select('round_number')
+                .eq('id', roundId)
+                .single();
+                
+            if (!round) {
+                console.error('Round not found');
+                return;
+            }
+            
+            // Check if score already exists
+            let existingScore = null;
+            
+            if (currentGame.format === 'team') {
+                const { data: scores } = await supabase
+                    .from('scores')
+                    .select('id')
+                    .eq('round_id', roundId)
+                    .eq('team', input.dataset.team);
+                    
+                if (scores && scores.length > 0) {
+                    existingScore = scores[0];
+                }
+            } else {
+                const { data: scores } = await supabase
+                    .from('scores')
+                    .select('id')
+                    .eq('round_id', roundId)
+                    .eq('player_id', parseInt(input.dataset.playerId));
+                    
+                if (scores && scores.length > 0) {
+                    existingScore = scores[0];
+                }
+            }
+            
+            // Update or insert score
+            if (existingScore) {
+                const { error } = await supabase
+                    .from('scores')
+                    .update({ score: currentValue })
+                    .eq('id', existingScore.id);
+                    
+                if (error) {
+                    console.error('Error updating score:', error);
+                    alert('Puan güncellenirken bir hata oluştu.');
+                    return;
+                }
+            } else {
+                const { error } = await supabase
+                    .from('scores')
+                    .insert([scoreData]);
+                    
+                if (error) {
+                    console.error('Error inserting score:', error);
+                    alert('Puan eklenirken bir hata oluştu.');
+                    return;
+                }
+            }
+            
+            // Reload game data
+            const rounds = await loadGameRounds(currentGame.id);
+            renderScoreTable(rounds);
+            
+            // Add to game history
+            await addToGameHistory(currentGame.id, 'update', `${currentGame.type.name} oyununda ${round.round_number}. el ${playerOrTeam}'nin puanı ${currentValue} olarak girildi.`);
+        }
+
+        async function deleteRound(roundId) {
+            // Get round number
+            const { data: round } = await supabase
+                .from('rounds')
+                .select('round_number')
+                .eq('id', roundId)
+                .single();
+                
+            if (!round) {
+                console.error('Round not found');
+                return;
+            }
+            
+            confirmMessage.textContent = `${round.round_number}. eli silmek istediğinize emin misiniz?`;
+            confirmModal.classList.add('active');
+            
+            confirmBtn.onclick = async () => {
+                // Delete scores first
+                await supabase
+                    .from('scores')
+                    .delete()
+                    .eq('round_id', roundId);
+                
+                // Delete round
+                const { error } = await supabase
+                    .from('rounds')
+                    .delete()
+                    .eq('id', roundId);
+                    
+                if (error) {
+                    console.error('Error deleting round:', error);
+                    alert('El silinirken bir hata oluştu.');
+                    return;
+                }
+                
+                // Reload game data
+                const rounds = await loadGameRounds(currentGame.id);
+                renderScoreTable(rounds);
+                
+                // Add to game history
+                await addToGameHistory(currentGame.id, 'delete', `${currentGame.type.name} oyununda ${round.round_number}. el silindi.`);
+                
+                closeConfirmModal();
+            };
+        }
+
+        function calculateTotals(rounds) {
+            if (!currentGame) return;
+            
+            if (currentGame.format === 'team') {
+                let team1Total = 0;
+                let team2Total = 0;
+                
+                rounds.forEach(round => {
+                    const team1Score = round.scores?.find(s => s.team === 'team1')?.score || 0;
+                    const team2Score = round.scores?.find(s => s.team === 'team2')?.score || 0;
+                    
+                    team1Total += team1Score;
+                    team2Total += team2Score;
+                });
+                
+                document.getElementById('total-team1').textContent = team1Total;
+                document.getElementById('total-team2').textContent = team2Total;
+                
+                // Clear all highlights first
+                const team1Cell = document.getElementById('total-team1').parentElement;
+                const team2Cell = document.getElementById('total-team2').parentElement;
+                
+                team1Cell.classList.remove('lowest-score');
+                team2Cell.classList.remove('lowest-score');
+                
+                // Highlight only the lowest total
+                if (team1Total < team2Total) {
+                    team1Cell.classList.add('lowest-score');
+                } else if (team2Total < team1Total) {
+                    team2Cell.classList.add('lowest-score');
+                }
+                // If equal, no highlight
+            } else {
+                const totals = {};
+                
+                // Initialize totals
+                currentGame.players.forEach(player => {
+                    totals[player.id] = 0;
+                });
+                
+                // Calculate totals
+                rounds.forEach(round => {
+                    round.scores?.forEach(score => {
+                        if (score.player_id && totals[score.player_id] !== undefined) {
+                            totals[score.player_id] += score.score || 0;
+                        }
+                    });
+                });
+                
+                // Update UI
+                currentGame.players.forEach(player => {
+                    const totalCell = document.getElementById(`total-${player.id}`);
+                    if (totalCell) {
+                        totalCell.textContent = totals[player.id] || 0;
+                    }
+                });
+                
+                // Find lowest score
+                let lowestScore = Infinity;
+                let lowestPlayerId = null;
+                
+                currentGame.players.forEach(player => {
+                    if (totals[player.id] < lowestScore) {
+                        lowestScore = totals[player.id];
+                        lowestPlayerId = player.id;
+                    }
+                });
+                
+                // Clear all highlights first
+                currentGame.players.forEach(player => {
+                    const totalCell = document.getElementById(`total-${player.id}`);
+                    if (totalCell) {
+                        totalCell.parentElement.classList.remove('lowest-score');
+                    }
+                });
+                
+                // Highlight only the lowest total
+                if (lowestPlayerId !== null) {
+                    const lowestCell = document.getElementById(`total-${lowestPlayerId}`);
+                    if (lowestCell) {
+                        lowestCell.parentElement.classList.add('lowest-score');
+                    }
+                }
+            }
+        }
+
+        function highlightLowestScore(round) {
+            if (!round || !round.scores || round.scores.length === 0) return;
+            
+            const row = document.getElementById(`round-${round.id}`);
+            if (!row) return;
+            
+            // Remove existing highlights
+            const cells = row.querySelectorAll('td');
+            cells.forEach(cell => {
+                cell.classList.remove('lowest-score');
+            });
+            
+            // Find lowest score
+            let lowestScore = Infinity;
+            let lowestCellIndex = -1;
+            
+            if (currentGame.format === 'team') {
+                const team1Score = round.scores.find(s => s.team === 'team1')?.score || 0;
+                const team2Score = round.scores.find(s => s.team === 'team2')?.score || 0;
+                
+                if (team1Score < lowestScore) {
+                    lowestScore = team1Score;
+                    lowestCellIndex = 1; // Team 1 is at index 1
+                }
+                if (team2Score < lowestScore) {
+                    lowestScore = team2Score;
+                    lowestCellIndex = 2; // Team 2 is at index 2
+                }
+            } else {
+                currentGame.players.forEach((player, index) => {
+                    const playerScore = round.scores.find(s => s.player_id === player.id)?.score || 0;
+                    if (playerScore < lowestScore) {
+                        lowestScore = playerScore;
+                        lowestCellIndex = index + 1; // +1 because first column is round number
+                    }
+                });
+            }
+            
+            // Highlight lowest score
+            if (lowestCellIndex >= 0) {
+                cells[lowestCellIndex].classList.add('lowest-score');
+            }
+        }
+
+        async function endGame() {
+            if (!currentGame) return;
+            
+            confirmMessage.textContent = 'Oyunu bitirmek istediğinize emin misiniz?';
+            confirmModal.classList.add('active');
+            
+            confirmBtn.onclick = async () => {
+                // Get game rounds with scores
+                const rounds = await loadGameRounds(currentGame.id);
+                
+                // Determine winner(s)
+                let winners = [];
+                
+                if (currentGame.format === 'team') {
+                    let team1Total = 0;
+                    let team2Total = 0;
+                    
+                    rounds.forEach(round => {
+                        const team1Score = round.scores?.find(s => s.team === 'team1')?.score || 0;
+                        const team2Score = round.scores?.find(s => s.team === 'team2')?.score || 0;
+                        
+                        team1Total += team1Score;
+                        team2Total += team2Score;
+                    });
+                    
+                    if (team1Total < team2Total) {
+                        winners = [...currentGame.teams.team1];
+                    } else if (team2Total < team1Total) {
+                        winners = [...currentGame.teams.team2];
+                    } else {
+                        // Tie
+                        winners = [...currentGame.teams.team1, ...currentGame.teams.team2];
+                    }
+                } else {
+                    const totals = {};
+                    
+                    // Initialize totals
+                    currentGame.players.forEach(player => {
+                        totals[player.id] = 0;
+                    });
+                    
+                    // Calculate totals
+                    rounds.forEach(round => {
+                        round.scores?.forEach(score => {
+                            if (score.player_id && totals[score.player_id] !== undefined) {
+                                totals[score.player_id] += score.score || 0;
+                            }
+                        });
+                    });
+                    
+                    // Find lowest score
+                    let lowestScore = Infinity;
+                    
+                    currentGame.players.forEach(player => {
+                        if (totals[player.id] < lowestScore) {
+                            lowestScore = totals[player.id];
+                            winners = [player];
+                        } else if (totals[player.id] === lowestScore) {
+                            winners.push(player);
+                        }
+                    });
+                }
+                
+                // Update game status
+                const { error: updateError } = await supabase
+                    .from('games')
+                    .update({ 
+                        is_active: false,
+                        ended_at: new Date().toISOString()
+                    })
+                    .eq('id', currentGame.id);
+                    
+                if (updateError) {
+                    console.error('Error ending game:', updateError);
+                    alert('Oyun bitirilirken bir hata oluştu.');
+                    return;
+                }
+                
+                // Update stats
+                for (const winner of winners) {
+                    // Check if stat exists
+                    const { data: existingStat } = await supabase
+                        .from('stats')
+                        .select('id')
+                        .eq('player_id', winner.id)
+                        .eq('game_type_id', currentGame.type_id);
+                        
+                    if (existingStat && existingStat.length > 0) {
+                        // Update existing stat
+                        await supabase
+                            .from('stats')
+                            .update({ wins: existingStat[0].wins + 1 })
+                            .eq('id', existingStat[0].id);
+                    } else {
+                        // Insert new stat
+                        await supabase
+                            .from('stats')
+                            .insert([{ 
+                                player_id: winner.id,
+                                game_type_id: currentGame.type_id,
+                                wins: 1
+                            }]);
+                    }
+                }
+                
+                // Add to game history
+                await addToGameHistory(currentGame.id, 'end', `Oyun bitti. Kazananlar: ${winners.map(w => w.name).join(', ')}`);
+                
+                // Close game view and refresh
+                backToHome();
+                await loadActiveGames();
+                await loadAllGames();
+                await loadStats();
+                
+                closeConfirmModal();
+            };
+        }
+
+        function toggleGameHistory() {
+            const gameHistory = document.getElementById('gameHistory');
+            gameHistory.classList.toggle('expanded');
+        }
+
+        function renderGameHistory(history) {
+            const gameHistoryDiv = document.getElementById('gameHistory');
+            gameHistoryDiv.innerHTML = '';
+            
+            if (history.length === 0) {
+                gameHistoryDiv.innerHTML = `
+                    <div class="text-center py-4 text-gray-500">
+                        <p>Oyun geçmişi bulunmamaktadır.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Sort history by timestamp (newest first)
+            const sortedHistory = [...history].sort((a, b) => 
+                new Date(b.created_at) - new Date(a.created_at)
+            );
+            
+            sortedHistory.forEach(item => {
+                const historyItem = document.createElement('div');
+                historyItem.className = `p-3 rounded-lg text-sm mb-2 ${getHistoryClass(item.action)}`;
+                
+                const time = new Date(item.created_at).toLocaleTimeString('tr-TR');
+                historyItem.innerHTML = `
+                    <div class="flex justify-between">
+                        <span>${item.description}</span>
+                        <span class="text-gray-500">${time}</span>
+                    </div>
+                `;
+                
+                gameHistoryDiv.appendChild(historyItem);
+            });
+        }
+
+        function getHistoryClass(action) {
+            switch (action) {
+                case 'add':
+                    return 'history-item-add';
+                case 'update':
+                    return 'history-item-update';
+                case 'delete':
+                    return 'history-item-delete';
+                case 'end':
+                    return 'history-item-add';
+                default:
+                    return '';
+            }
+        }
+
+        // Stats
+        function renderStats(statsData) {
+            const winnersTable = document.getElementById('winnersTable');
+            winnersTable.innerHTML = '';
+            
+            // Group stats by player
+            const playerStats = {};
+            
+            statsData.forEach(stat => {
+                if (!playerStats[stat.player_id]) {
+                    playerStats[stat.player_id] = {
+                        id: stat.player_id,
+                        name: stat.players.name,
+                        '101-okey': 0,
+                        'uno': 0,
+                        'düz-okey': 0,
+                        total: 0
+                    };
+                }
+                
+                playerStats[stat.player_id][stat.game_types.key] = stat.wins;
+                playerStats[stat.player_id].total += stat.wins;
+            });
+            
+            // Convert to array and sort
+            const statsArray = Object.values(playerStats);
+            statsArray.sort((a, b) => b.total - a.total);
+            
+            if (statsArray.length === 0) {
+                winnersTable.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                            Henüz istatistik bulunmamaktadır.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Render table
+            statsArray.forEach(playerStats => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                                <span class="text-indigo-800 font-medium">${playerStats.name.charAt(0)}</span>
+                            </div>
+                            <div class="ml-4">
+                                <div class="text-sm font-medium text-gray-900">${playerStats.name}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${playerStats['101-okey']}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${playerStats.uno}</td>
+                    <td class="px-6 py-3 whitespace-nowrap text-sm text-gray-500">${playerStats['düz-okey']}</td>
+                    <td class="px-6 py-3 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            ${playerStats.total}
+                        </span>
+                    </td>
+                `;
+                
+                winnersTable.appendChild(row);
+            });
+        }
+
+        // History
+        async function addToGameHistory(gameId, action, description) {
+            const { error } = await supabase
+                .from('game_history')
+                .insert([{ 
+                    game_id: gameId,
+                    action,
+                    description
+                }]);
+                
+            if (error) {
+                console.error('Error adding to game history:', error);
+            }
+        }
+
+        function closeConfirmModal() {
+            confirmModal.classList.remove('active');
+        }
+
+        // Initialize the application
+        init();
+    </script>
+</body>
+</html>
