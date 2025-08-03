@@ -387,9 +387,9 @@
     </div>
 
     <script>
-        // Supabase configuration
-        const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-        const SUPABASE_KEY = 'YOUR_SUPABASE_KEY';
+        // Supabase configuration - bu değerler Netlify tarafından doldurulacak
+        const SUPABASE_URL = "%%SUPABASE_URL%%";
+        const SUPABASE_KEY = "%%SUPABASE_KEY%%";
         
         // Initialize Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
